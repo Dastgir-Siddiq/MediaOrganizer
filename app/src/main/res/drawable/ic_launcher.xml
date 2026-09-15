@@ -1,0 +1,35 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Background -->
+    <path
+        android:pathData="M0,0h108v108h-108z"
+        android:fillColor="#12131C"/>
+        
+    <!-- Styled Circle -->
+    <path
+        android:pathData="M54,12C30.8,12 12,30.8 12,54C12,77.2 30.8,96 54,96C77.2,96 96,77.2 96,54C96,30.8 77.2,12 54,12Z"
+        android:fillColor="#1E2030"/>
+        
+    <!-- Folder Icon -->
+    <path
+        android:pathData="M32,38C32,35.8 33.8,34 36,34H48L54,42H72C74.2,42 76,43.8 76,46V70C76,72.2 74.2,74 72,74H36C33.8,74 32,72.2 32,70V38Z"
+        android:fillColor="#0D9488"/>
+
+    <!-- Film strip decoration inside folder -->
+    <path
+        android:pathData="M38,48h30v4h-30z"
+        android:fillColor="#0f766e"/>
+        
+    <path
+        android:pathData="M38,58h30v8h-30z"
+        android:fillColor="#115e59"/>
+
+    <!-- Play symbol in the center -->
+    <path
+        android:pathData="M50,50 L60,56 L50,62 Z"
+        android:fillColor="#ffffff"/>
+</vector>
