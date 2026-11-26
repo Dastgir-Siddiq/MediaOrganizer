@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ಮೀಡಿಯಾ ಆರ್ಗನೈಸರ್</string>
+    <string name="text_to_find">ಹುಡುಕಬೇಕಾದ ಪಠ್ಯ</string>
+    <string name="app_language">ಅಪ್ಲಿಕೇಶನ್ ಭಾಷೆ</string>
+    <string name="close">ಮುಚ್ಚು</string>
+    <string name="target_directory">ಗುರಿ ಡೈರೆಕ್ಟರಿ</string>
+    <string name="no_items_match_filter">ನಿಮ್ಮ ಫಿಲ್ಟರ್‌ಗೆ ಯಾವುದೇ ಐಟಂಗಳು ಹೊಂದಿಕೆಯಾಗುವುದಿಲ್ಲ.</string>
+    <string name="clear">ತೆರವುಗೊಳಿಸಿ</string>
+    <string name="media_organiser">⚡ ಮೀಡಿಯಾ ಆರ್ಗನೈಸರ್</string>
+    <string name="add">ಸೇರಿಸಿ</string>
+    <string name="scan">ಸ್ಕ್ಯಾನ್</string>
+    <string name="run">ರನ್</string>
+    <string name="find_replace">ಹುಡುಕಿ &amp; ಬದಲಾಯಿಸಿ</string>
+    <string name="sort">ವಿಂಗಡಿಸಿ: </string>
+    <string name="change">ಬದಲಾಯಿಸಿ</string>
+    <string name="cancel">ರದ್ದುಮಾಡು</string>
+    <string name="cyberpunk_console_log_viewport">⚡ ಸೈಬರ್‌ಪಂಕ್ ಕನ್ಸೋಲ್ ಲಾಗ್ ವ್ಯೂಪೋರ್ಟ್</string>
+    <string name="developed_by">ಅಭಿವೃದ್ಧಿಪಡಿಸಿದವರು</string>
+    <string name="settings">ಸೆಟ್ಟಿಂಗ್‌ಗಳು</string>
+    <string name="system_active_ready">ಸಿಸ್ಟಮ್ ಸಕ್ರಿಯವಾಗಿದೆ. ಫೈಲ್ ವಿಂಗಡಣೆ, TVMaze ಇಂಡೆಕ್ಸಿಂಗ್, ಅಥವಾ ಸಾಧನವನ್ನು ಸ್ವಚ್ಛಗೊಳಿಸಲು ಸಿದ್ಧವಾಗಿದೆ.</string>
+    <string name="find_replace_btn">ಹುಡುಕಿ &amp; ಬದಲಾಯಿಸಿ</string>
+    <string name="junk_cleanup_btn">ಜಂಕ್ ಸ್ವಚ್ಛಗೊಳಿಸುವಿಕೆ</string>
+    <string name="cleanup">ಸ್ವಚ್ಛಗೊಳಿಸಿ</string>
+    <string name="organize">ಆಯೋಜಿಸಿ</string>
+    <string name="scan_directory_desc">ಚಲನಚಿತ್ರಗಳು ಅಥವಾ ಟಿವಿ ಸರಣಿಗಳನ್ನು ಪಟ್ಟಿ ಮಾಡಲು ಮತ್ತು ಮರುಹೆಸರಿಸಲು ಡೈರೆಕ್ಟರಿಯನ್ನು ಸ್ಕ್ಯಾನ್ ಮಾಡಿ.\nಖಾಲಿ ಫೋಲ್ಡರ್‌ಗಳನ್ನು ಸುರಕ್ಷಿತವಾಗಿ ತೆರವುಗೊಳಿಸಲು ಕ್ಲೀನಪ್ ಟ್ಯಾಬ್ ಬಳಸಿ.</string>
+    <string name="replace_with">ಇದರೊಂದಿಗೆ ಬದಲಾಯಿಸಿ</string>
+    <string name="dastgir_siddiq">ದಸ್ತಗೀರ್ ಸಿದ್ದಿಕ್</string>
+    <string name="ready_to_scan">✨ ಸ್ಕ್ಯಾನ್ ಮಾಡಲು ಸಿದ್ಧವಾಗಿದೆ</string>
+    <string name="add_new_path_keyword">ಹೊಸ ಮಾರ್ಗ ಕೀವರ್ಡ್ ಸೇರಿಸಿ...</string>
+    <string name="clear_capital">ತೆರವುಗೊಳಿಸಿ</string>
+    <string name="excluded_paths">ಹೊರಗಿಡಲಾದ ಮಾರ್ಗಗಳು (ಸ್ಕ್ಯಾನ್ ಸಮಯದಲ್ಲಿ ನಿರ್ಲಕ್ಷಿಸಲಾಗಿದೆ)</string>
+    <string name="junk_folders">ಜಂಕ್ ಫೋಲ್ಡರ್‌ಗಳು (ಸ್ವಚ್ಛಗೊಳಿಸುವ ಸಮಯದಲ್ಲಿ ಅಳಿಸಲಾಗಿದೆ)</string>
+    <string name="source_directory">ಮೂಲ ಡೈರೆಕ್ಟರಿ</string>
+    <string name="movies_target">ಚಲನಚಿತ್ರಗಳ ಗುರಿ</string>
+    <string name="tv_series_target">ಟಿವಿ ಸರಣಿ ಗುರಿ</string>
+</resources>

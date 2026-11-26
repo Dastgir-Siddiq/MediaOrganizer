@@ -1,21 +1,26 @@
 package com.mediaorganizer.app
 
+import android.app.Application
+import android.content.Context
+import android.net.Uri
+import android.os.Build
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.mediaorganizer.app.MediaScanner.MediaItem
+import com.mediaorganizer.app.data.AppDatabase
+import com.mediaorganizer.app.data.BatchWithRecords
+import com.mediaorganizer.app.data.CleanupBatchWithRecords
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.regex.Pattern
 
 enum class RenameStatus {
     PENDING,
@@ -32,19 +37,33 @@ data class ScanPreviewItem(
     val errorMessage: String? = null
 )
 
-class MediaOrganizerViewModel : ViewModel() {
+class MediaOrganizerViewModel(application: Application) : AndroidViewModel(application) {
 
-    // Default paths based on the new python script
-    var basePath by mutableStateOf("/storage/emulated/0/Download")
-    var movieDir by mutableStateOf("/storage/emulated/0/Entertainment/Movies")
-    var tvDir by mutableStateOf("/storage/emulated/0/Entertainment")
+    private val database by lazy { AppDatabase.getInstance(getApplication()) }
+    private val transactionDao by lazy { database.transactionDao() }
+    private val cleanupDao by lazy { database.cleanupDao() }
 
-    // New feature states
-    var dryRunMode by mutableStateOf(false)
+    // Directory settings
+    var basePath by mutableStateOf(AppConfig.DEFAULT_BASE_PATH)
+    var movieDir by mutableStateOf(AppConfig.DEFAULT_MOVIE_DIR)
+    var tvDir by mutableStateOf(AppConfig.DEFAULT_TV_DIR)
+
+    // Feature flags & filters
     var filterQuery by mutableStateOf("")
     var filterType by mutableStateOf("ALL") // "ALL", "MOVIE", "TV"
     var sortOrder by mutableStateOf("ORIGINAL") // "ORIGINAL", "PROPOSED", "TYPE"
     var wikiFirst by mutableStateOf(false)
+    var movieLookupOnline by mutableStateOf(false)
+
+    // Custom naming templates
+    var movieTemplate by mutableStateOf(NamingTemplateFormatter.DEFAULT_MOVIE_TEMPLATE)
+    var tvTemplate by mutableStateOf(NamingTemplateFormatter.DEFAULT_TV_TEMPLATE)
+
+    // Background watchdog settings
+    var watchdogEnabled by mutableStateOf(false)
+    var watchdogIntervalHours by mutableStateOf(AppConfig.DEFAULT_WATCHDOG_INTERVAL_HOURS)
+    var watchdogRequireCharging by mutableStateOf(true)
+    var watchdogRequireIdle by mutableStateOf(false)
 
     // Progress tracking
     var totalFilesScanned by mutableStateOf(0)
@@ -54,10 +73,22 @@ class MediaOrganizerViewModel : ViewModel() {
     var isScanning by mutableStateOf(false)
     var isRenaming by mutableStateOf(false)
     var isCleaning by mutableStateOf(false)
+    var isUndoing by mutableStateOf(false)
 
     // Scanned results
     var scannedItems by mutableStateOf<List<ScanPreviewItem>>(emptyList())
     var isSelectAll by mutableStateOf(true)
+
+    // Undo / Transaction history (Organize + Cleanup)
+    var transactionHistory by mutableStateOf<List<BatchWithRecords>>(emptyList())
+    val latestActiveBatch: BatchWithRecords?
+        get() = transactionHistory.firstOrNull { !it.batch.isUndone }
+    var lastExecutedBatchId by mutableStateOf<Long?>(null)
+    var previewTriggerCount by mutableStateOf(0)
+
+    var cleanupHistory by mutableStateOf<List<CleanupBatchWithRecords>>(emptyList())
+    val latestActiveCleanupBatch: CleanupBatchWithRecords?
+        get() = cleanupHistory.firstOrNull { !it.batch.isUndone }
 
     // Log terminal output
     var logs by mutableStateOf<List<String>>(emptyList())
@@ -69,29 +100,17 @@ class MediaOrganizerViewModel : ViewModel() {
     var skippedTv by mutableStateOf(0)
     var executionTime by mutableStateOf("")
 
-    // Specific junk paths
+    // Path lists
     var junkPaths by mutableStateOf<List<String>>(emptyList())
     var excludedPaths by mutableStateOf<List<String>>(emptyList())
 
-    private val DEFAULT_JUNK_PATHS = listOf(
-        "/storage/emulated/0/.FileManagerRecycler",
-        "/storage/emulated/0/Download/.com_oplus_rom",
-        "/storage/emulated/0/Download/.content_portal",
-        "/storage/emulated/0/Download/com_account_usercenter_new",
-        "/storage/emulated/0/Movies/.thumbnails",
-        "/storage/emulated/0/Music/.thumbnails",
-        "/storage/emulated/0/oua_classifier",
-        "/storage/emulated/0/Pictures/.thumbnails"
-    )
+    private var settingsLoaded = false
 
-    private val DEFAULT_EXCLUDED_PATHS = listOf(
-        "/storage/emulated/0/Android",
-        "/storage/emulated/0/DCIM"
-    )
-
-    private val DEFAULT_BASE_PATH = "/storage/emulated/0/Download"
-    private val DEFAULT_MOVIE_DIR = "/storage/emulated/0/Entertainment/Movies"
-    private val DEFAULT_TV_DIR = "/storage/emulated/0/Entertainment"
+    init {
+        loadSettings(getApplication())
+        observeTransactionHistory()
+        observeCleanupHistory()
+    }
 
     // Computed filtered/sorted list
     val filteredItems: List<ScanPreviewItem>
@@ -99,108 +118,160 @@ class MediaOrganizerViewModel : ViewModel() {
             var list = scannedItems
             if (filterType != "ALL") {
                 list = list.filter {
-                    if (filterType == "MOVIE") it.mediaItem is MediaScanner.MediaItem.Movie
-                    else it.mediaItem is MediaScanner.MediaItem.TvEpisode
+                    if (filterType == "MOVIE") it.mediaItem is MediaItem.Movie
+                    else it.mediaItem is MediaItem.TvEpisode
                 }
             }
             if (filterQuery.isNotBlank()) {
                 val q = filterQuery.lowercase()
                 list = list.filter {
                     it.mediaItem.originalName.lowercase().contains(q) ||
-                    it.proposedName.lowercase().contains(q)
+                        it.proposedName.lowercase().contains(q)
                 }
             }
             return when (sortOrder) {
                 "PROPOSED" -> list.sortedBy { it.proposedName.lowercase() }
-                "TYPE" -> list.sortedBy { if (it.mediaItem is MediaScanner.MediaItem.Movie) 0 else 1 }
+                "TYPE" -> list.sortedBy { if (it.mediaItem is MediaItem.Movie) 0 else 1 }
                 else -> list.sortedBy { it.mediaItem.originalName.lowercase() }
             }
         }
 
-    fun loadSettings(context: android.content.Context) {
-        val prefs = context.getSharedPreferences("MediaOrganizerPrefs", android.content.Context.MODE_PRIVATE)
-        basePath = prefs.getString("basePath", DEFAULT_BASE_PATH) ?: DEFAULT_BASE_PATH
-        movieDir = prefs.getString("movieDir", DEFAULT_MOVIE_DIR) ?: DEFAULT_MOVIE_DIR
-        tvDir = prefs.getString("tvDir", DEFAULT_TV_DIR) ?: DEFAULT_TV_DIR
-        dryRunMode = prefs.getBoolean("dryRunMode", false)
+    fun currentConfig(): AppConfig {
+        return AppConfig(
+            basePath = basePath,
+            movieDir = movieDir,
+            tvDir = tvDir,
+            wikiFirst = wikiFirst,
+            movieLookupOnline = movieLookupOnline,
+            junkPaths = junkPaths,
+            excludedPaths = excludedPaths,
+            movieTemplate = movieTemplate,
+            tvTemplate = tvTemplate,
+            watchdogEnabled = watchdogEnabled,
+            watchdogIntervalHours = watchdogIntervalHours,
+            watchdogRequireCharging = watchdogRequireCharging,
+            watchdogRequireIdle = watchdogRequireIdle
+        )
+    }
 
-        val version = prefs.getInt("prefs_version", 1)
-        if (version < 2) {
-            junkPaths = DEFAULT_JUNK_PATHS
-            excludedPaths = DEFAULT_EXCLUDED_PATHS
-            saveJunkPathsInternal(context, junkPaths)
-            saveExcludedPathsInternal(context, excludedPaths)
-            prefs.edit().putInt("prefs_version", 2).apply()
-        } else {
-            val savedJunk = prefs.getStringSet("junkPaths", null)
-            junkPaths = if (savedJunk != null) savedJunk.toList().sorted() else DEFAULT_JUNK_PATHS
+    private fun applyConfig(config: AppConfig) {
+        basePath = config.basePath
+        movieDir = config.movieDir
+        tvDir = config.tvDir
+        wikiFirst = config.wikiFirst
+        movieLookupOnline = config.movieLookupOnline
+        junkPaths = config.junkPaths
+        excludedPaths = config.excludedPaths
+        movieTemplate = config.movieTemplate
+        tvTemplate = config.tvTemplate
+        watchdogEnabled = config.watchdogEnabled
+        watchdogIntervalHours = config.watchdogIntervalHours
+        watchdogRequireCharging = config.watchdogRequireCharging
+        watchdogRequireIdle = config.watchdogRequireIdle
+    }
 
-            val savedExcluded = prefs.getStringSet("excludedPaths", null)
-            excludedPaths = if (savedExcluded != null) savedExcluded.toList().sorted() else DEFAULT_EXCLUDED_PATHS
+    private fun observeTransactionHistory() {
+        viewModelScope.launch {
+            transactionDao.getAllBatchesFlow().collectLatest { batches ->
+                transactionHistory = batches
+            }
         }
     }
 
-    fun saveSettings(context: android.content.Context) {
-        val prefs = context.getSharedPreferences("MediaOrganizerPrefs", android.content.Context.MODE_PRIVATE)
-        prefs.edit()
-            .putString("basePath", basePath)
-            .putString("movieDir", movieDir)
-            .putString("tvDir", tvDir)
-            .putBoolean("dryRunMode", dryRunMode)
-            .apply()
+    private fun observeCleanupHistory() {
+        viewModelScope.launch {
+            cleanupDao.getAllBatchesFlow().collectLatest { batches ->
+                cleanupHistory = batches
+            }
+        }
+    }
+
+    private fun getCleanupTrashDir(): File {
+        val app = getApplication<Application>()
+        return app.getExternalFilesDir("cleanup_trash") ?: File(app.filesDir, "cleanup_trash")
+    }
+
+    fun loadSettings(context: Context) {
+        if (settingsLoaded) return
+        settingsLoaded = true
+        val config = AppPreferences.loadConfig(context)
+        applyConfig(config)
+        WatchdogScheduler.syncWithConfig(context, config)
+    }
+
+    fun saveSettings(context: Context) {
+        val config = currentConfig()
+        AppPreferences.saveConfig(context, config)
+        WatchdogScheduler.syncWithConfig(context, config)
+    }
+
+    fun updateTemplates(newMovieTemplate: String, newTvTemplate: String) {
+        movieTemplate = newMovieTemplate
+        tvTemplate = newTvTemplate
+        saveSettings(getApplication())
+    }
+
+    fun resetTemplatesToDefault() {
+        movieTemplate = NamingTemplateFormatter.DEFAULT_MOVIE_TEMPLATE
+        tvTemplate = NamingTemplateFormatter.DEFAULT_TV_TEMPLATE
+        saveSettings(getApplication())
     }
 
     fun resetPathsToDefaults() {
-        basePath = DEFAULT_BASE_PATH
-        movieDir = DEFAULT_MOVIE_DIR
-        tvDir = DEFAULT_TV_DIR
+        basePath = AppConfig.DEFAULT_BASE_PATH
+        movieDir = AppConfig.DEFAULT_MOVIE_DIR
+        tvDir = AppConfig.DEFAULT_TV_DIR
+        saveSettings(getApplication())
     }
 
-    // Keep backward compat
-    fun loadJunkPaths(context: android.content.Context) {
+    fun loadJunkPaths(context: Context) {
         loadSettings(context)
     }
 
-    private fun saveJunkPathsInternal(context: android.content.Context, paths: List<String>) {
-        val prefs = context.getSharedPreferences("MediaOrganizerPrefs", android.content.Context.MODE_PRIVATE)
-        prefs.edit().putStringSet("junkPaths", paths.toSet()).apply()
-    }
-
-    private fun saveExcludedPathsInternal(context: android.content.Context, paths: List<String>) {
-        val prefs = context.getSharedPreferences("MediaOrganizerPrefs", android.content.Context.MODE_PRIVATE)
-        prefs.edit().putStringSet("excludedPaths", paths.toSet()).apply()
-    }
-
-    fun addJunkPath(context: android.content.Context, path: String) {
+    fun addJunkPath(context: Context, path: String) {
         if (path.isNotBlank() && !junkPaths.contains(path)) {
-            val newList = junkPaths.toMutableList().apply { add(path) }
-            junkPaths = newList.sorted()
-            saveJunkPathsInternal(context, junkPaths)
+            junkPaths = (junkPaths + path).sorted()
+            AppPreferences.saveJunkPaths(context, junkPaths)
         }
     }
 
-    fun removeJunkPath(context: android.content.Context, path: String) {
+    fun removeJunkPath(context: Context, path: String) {
         if (junkPaths.contains(path)) {
-            val newList = junkPaths.toMutableList().apply { remove(path) }
-            junkPaths = newList
-            saveJunkPathsInternal(context, junkPaths)
+            junkPaths = junkPaths.filterNot { it == path }
+            AppPreferences.saveJunkPaths(context, junkPaths)
         }
     }
 
-    fun addExcludedPath(context: android.content.Context, path: String) {
+    fun addExcludedPath(context: Context, path: String) {
         if (path.isNotBlank() && !excludedPaths.contains(path)) {
-            val newList = excludedPaths.toMutableList().apply { add(path) }
-            excludedPaths = newList.sorted()
-            saveExcludedPathsInternal(context, excludedPaths)
+            excludedPaths = (excludedPaths + path).sorted()
+            AppPreferences.saveExcludedPaths(context, excludedPaths)
         }
     }
 
-    fun removeExcludedPath(context: android.content.Context, path: String) {
+    fun removeExcludedPath(context: Context, path: String) {
         if (excludedPaths.contains(path)) {
-            val newList = excludedPaths.toMutableList().apply { remove(path) }
-            excludedPaths = newList
-            saveExcludedPathsInternal(context, excludedPaths)
+            excludedPaths = excludedPaths.filterNot { it == path }
+            AppPreferences.saveExcludedPaths(context, excludedPaths)
         }
+    }
+
+    fun updateWatchdogSettings(
+        enabled: Boolean,
+        intervalHours: Int,
+        requireCharging: Boolean,
+        requireIdle: Boolean
+    ) {
+        watchdogEnabled = enabled
+        watchdogIntervalHours = intervalHours
+        watchdogRequireCharging = requireCharging
+        watchdogRequireIdle = requireIdle
+        saveSettings(getApplication())
+    }
+
+    fun triggerWatchdogScanNow() {
+        WatchdogScheduler.triggerImmediateScan(getApplication(), isManualTrigger = true)
+        addLog("🐕 Triggered immediate background Watchdog scan.")
     }
 
     fun addLog(message: String) {
@@ -229,7 +300,7 @@ class MediaOrganizerViewModel : ViewModel() {
     }
 
     fun startScan() {
-        if (isScanning || isRenaming || isCleaning) return
+        if (isScanning || isRenaming || isCleaning || isUndoing) return
         isScanning = true
         scannedItems = emptyList()
         clearLogs()
@@ -238,26 +309,27 @@ class MediaOrganizerViewModel : ViewModel() {
         skippedMovies = 0
         skippedTv = 0
         executionTime = ""
+        lastExecutedBatchId = null
         totalFilesScanned = 0
         scanProgress = 0f
 
-        val dryRunPrefix = if (dryRunMode) "[DRY RUN] " else ""
-        addLog("🎬 ${dryRunPrefix}MEDIA ORGANIZER SCAN STARTED")
-        addLog("Scanning directory: $basePath")
+        val config = currentConfig()
+        addLog("🎬 MEDIA ORGANIZER SCAN STARTED")
+        addLog("Scanning directory: ${config.basePath}")
 
         viewModelScope.launch(Dispatchers.Default) {
             val startTime = System.currentTimeMillis()
-            val baseFile = File(basePath)
+            val baseFile = File(config.basePath)
 
             if (!baseFile.exists() || !baseFile.isDirectory) {
                 withContext(Dispatchers.Main) {
-                    addLog("❌ Error: Path does not exist or is not a directory: $basePath")
+                    addLog("❌ Error: Path does not exist or is not a directory: ${config.basePath}")
                     isScanning = false
                 }
                 return@launch
             }
 
-            val rawItems = MediaScanner.scanDirectory(baseFile, excludedPaths) { progressMessage ->
+            val rawItems = MediaScanner.scanDirectory(baseFile, config.excludedPaths) { progressMessage ->
                 viewModelScope.launch(Dispatchers.Main) {
                     addLog(progressMessage)
                     totalFilesScanned++
@@ -274,137 +346,41 @@ class MediaOrganizerViewModel : ViewModel() {
                     addLog("⚠️ No matching video files (Movies or TV Episodes) found.")
                     isScanning = false
                     scanProgress = 0f
+                    AppPreferences.setLastScanSubtitle(getApplication(), "No new media")
+                    WatchdogScanWorker.requestTileRefresh(getApplication())
                 }
                 return@launch
             }
 
-            addLog("🔍 Classification complete. Found ${rawItems.size} items. Fetching titles from TVMaze & Wikipedia...")
-
-            // Fetch TV titles & Build proposed names/paths
-            val previewList = mutableListOf<ScanPreviewItem>()
-            val showTitlesCache = mutableMapOf<Pair<String, Int>, Map<Int, String>>()
-
-            // --- FETCH TV TITLES WITH FULL EPISODE LIST CONTEXT ---
-            val tvItems = rawItems.filterIsInstance<MediaItem.TvEpisode>()
-            val tvGroups = tvItems.groupBy { Pair(it.showName, it.season) }
-            val totalGroups = tvGroups.size.coerceAtLeast(1)
-            var groupIdx = 0
-
-            for ((key, itemsInSeason) in tvGroups) {
-                val (showName, season) = key
-                val episodeNumbers = mutableSetOf<Int>()
-                for (item in itemsInSeason) {
-                    episodeNumbers.add(item.episode)
-                    if (item.episodeEnd != null) {
-                        for (n in item.episode..item.episodeEnd) {
-                            episodeNumbers.add(n)
-                        }
-                    }
-                }
-
-                val sortedEpNums = episodeNumbers.sorted()
-                if (!showTitlesCache.containsKey(key)) {
-                    withContext(Dispatchers.Main) {
-                        addLog("Fetching titles for $showName Season $season...")
-                    }
-                    val titles = try {
-                        withContext(Dispatchers.IO) {
-                            MediaTitleFetcher.getEpisodeTitles(showName, season, sortedEpNums, wikiFirst) { logMsg ->
-                                viewModelScope.launch(Dispatchers.Main) {
-                                    addLog(logMsg)
-                                }
-                            }
-                        }
-                    } catch (e: Exception) {
-                        withContext(Dispatchers.Main) {
-                            addLog("⚠️ Could not fetch titles for $showName: ${e.message}")
-                        }
-                        emptyMap<Int, String>()
-                    }
-                    showTitlesCache[key] = titles
-                }
-                groupIdx++
-                val progress = 0.3f + (groupIdx.toFloat() / totalGroups.toFloat()) * 0.5f
-                withContext(Dispatchers.Main) { scanProgress = progress }
+            withContext(Dispatchers.Main) {
+                addLog("🔍 Classification complete. Found ${rawItems.size} items. Checking cache & metadata...")
             }
 
-            // --- BUILD PREVIEWS ---
-            for ((idx, item) in rawItems.withIndex()) {
-                when (item) {
-                    is MediaItem.Movie -> {
-                        val ext = item.file.extension
-                        val destName = "${item.movieName} (${item.year}).$ext"
-                        val destPath = File(movieDir, destName).absolutePath
-                        previewList.add(
-                            ScanPreviewItem(
-                                mediaItem = item,
-                                proposedName = destName,
-                                proposedPath = destPath
-                            )
-                        )
-                        withContext(Dispatchers.Main) {
-                            val subNotice = if (item.companionSubtitles.isNotEmpty()) " (+${item.companionSubtitles.size} subs)" else ""
-                            addLog("Found Movie: ${item.originalName}$subNotice → $destName")
+            val previewList = withContext(Dispatchers.IO) {
+                MediaBatchExecutor.buildPreviewItems(
+                    rawItems = rawItems,
+                    config = config,
+                    context = getApplication(),
+                    onProgress = { p ->
+                        viewModelScope.launch(Dispatchers.Main) {
+                            scanProgress = p
+                        }
+                    },
+                    onLog = { logMsg ->
+                        viewModelScope.launch(Dispatchers.Main) {
+                            addLog(logMsg)
                         }
                     }
-                    is MediaItem.TvEpisode -> {
-                        val ext = item.file.extension
-                        val cacheKey = Pair(item.showName, item.season)
-                        val titles = showTitlesCache[cacheKey] ?: emptyMap()
-
-                        val epNum = item.episode
-                        val epEnd = item.episodeEnd
-                        val epTag = item.tag // S01E01 or S01E01-E02
-
-                        val destName = if (epEnd != null) {
-                            val epTitles = mutableListOf<String>()
-                            for (n in epNum..epEnd) {
-                                if (titles.containsKey(n)) {
-                                    epTitles.add(titles[n]!!)
-                                }
-                            }
-                            if (epTitles.isNotEmpty()) {
-                                val combinedTitle = MediaScanner.sanitizeFilename(epTitles.joinToString(" & "))
-                                "${item.showName} $epTag - $combinedTitle.$ext"
-                            } else {
-                                "${item.showName} $epTag.$ext"
-                            }
-                        } else {
-                            if (titles.containsKey(epNum)) {
-                                val epTitle = MediaScanner.sanitizeFilename(titles[epNum]!!)
-                                "${item.showName} $epTag - $epTitle.$ext"
-                            } else {
-                                "${item.showName} $epTag.$ext"
-                            }
-                        }
-
-                        // Target dir: tvDir/showName/season:02d/
-                        val showFolder = File(tvDir, item.showName)
-                        val seasonFolder = File(showFolder, String.format("%02d", item.season))
-                        val destPath = File(seasonFolder, destName).absolutePath
-
-                        previewList.add(
-                            ScanPreviewItem(
-                                mediaItem = item,
-                                proposedName = destName,
-                                proposedPath = destPath
-                            )
-                        )
-                        withContext(Dispatchers.Main) {
-                            val subNotice = if (item.companionSubtitles.isNotEmpty()) " (+${item.companionSubtitles.size} subs)" else ""
-                            addLog("Found TV Episode: ${item.originalName}$subNotice → $destName")
-                        }
-                    }
-                }
-                // Update progress during preview building
-                val buildProgress = 0.8f + (idx.toFloat() / rawItems.size.coerceAtLeast(1).toFloat()) * 0.2f
-                withContext(Dispatchers.Main) { scanProgress = buildProgress }
+                )
             }
 
             val durationSec = (System.currentTimeMillis() - startTime) / 1000.0
+            AppPreferences.setLastScanSubtitle(getApplication(), "${previewList.size} item(s) scanned")
+            WatchdogScanWorker.requestTileRefresh(getApplication())
 
             withContext(Dispatchers.Main) {
                 scannedItems = previewList
+                isSelectAll = true
                 scanProgress = 1f
                 addLog("🎉 SCAN COMPLETED in ${String.format("%.2f", durationSec)}s. Found ${previewList.size} items.")
                 isScanning = false
@@ -412,39 +388,8 @@ class MediaOrganizerViewModel : ViewModel() {
         }
     }
 
-    private fun computeSubtitleDestName(subFile: File, proposedName: String, usedNames: Set<String>): String {
-        val extIndex = proposedName.lastIndexOf('.')
-        val baseStem = if (extIndex > 0) proposedName.substring(0, extIndex) else proposedName
-        return SubtitleHelper.subtitleDestinationName(baseStem, subFile.absolutePath, usedNames)
-    }
-
-    private fun removeEmptyParents(dirPath: File, stopAt: File, onLog: (String) -> Unit = {}) {
-        var current: File? = dirPath
-        val stopNorm = stopAt.canonicalPath
-
-        while (current != null && current.exists()) {
-            val currentNorm = current.canonicalPath
-            if (currentNorm == stopNorm || !currentNorm.startsWith(stopNorm)) {
-                break
-            }
-
-            val list = current.listFiles()
-            if (list != null && list.isEmpty()) {
-                val dirName = current.name
-                if (current.delete()) {
-                    onLog("🗑 Removed empty folder: $dirName/")
-                } else {
-                    break
-                }
-            } else {
-                break
-            }
-            current = current.parentFile
-        }
-    }
-
     fun executeRename() {
-        if (isRenaming || isScanning || isCleaning) return
+        if (isRenaming || isScanning || isCleaning || isUndoing) return
         isRenaming = true
 
         val itemsToRename = scannedItems.filter { it.isSelected && it.status == RenameStatus.PENDING }
@@ -454,280 +399,323 @@ class MediaOrganizerViewModel : ViewModel() {
             return
         }
 
-        val dryRunPrefix = if (dryRunMode) "[DRY RUN] " else ""
-        addLog("🚀 ${dryRunPrefix}BATCH RENAMING STARTED: Processing ${itemsToRename.size} items...")
+        addLog("🚀 BATCH RENAMING STARTED: Processing ${itemsToRename.size} items...")
 
         viewModelScope.launch(Dispatchers.Default) {
-            val startTime = System.currentTimeMillis()
-            var movieCount = 0
-            var tvCount = 0
-            var skippedMovieCount = 0
-            var skippedTvCount = 0
-            val sourceDirsToClean = mutableSetOf<File>()
-
-            val updatedList = scannedItems.map { it }.toMutableList()
-
-            for (i in scannedItems.indices) {
-                val previewItem = scannedItems[i]
-                if (!previewItem.isSelected || previewItem.status != RenameStatus.PENDING) {
-                    continue
-                }
-
-                val sourceFile = previewItem.mediaItem.file
-                val destFile = File(previewItem.proposedPath)
-
-                // DRY RUN: just log what would happen
-                if (dryRunMode) {
-                    withContext(Dispatchers.Main) {
-                        addLog("[DRY RUN] Would move: ${previewItem.mediaItem.originalName} → ${previewItem.proposedName}")
-                    }
-                    updatedList[i] = previewItem.copy(status = RenameStatus.SUCCESS)
-                    when (previewItem.mediaItem) {
-                        is MediaItem.Movie -> movieCount++
-                        is MediaItem.TvEpisode -> tvCount++
-                    }
-                    withContext(Dispatchers.Main) { scannedItems = updatedList.toList() }
-                    continue
-                }
-
-                // Skip if source doesn't exist
-                if (!sourceFile.exists()) {
-                    updatedList[i] = previewItem.copy(
-                        status = RenameStatus.FAILED,
-                        errorMessage = "Source file does not exist"
-                    )
-                    withContext(Dispatchers.Main) {
-                        addLog("❌ Failed: Source file not found: ${previewItem.mediaItem.originalName}")
-                        scannedItems = updatedList.toList()
-                    }
-                    continue
-                }
-
-                // Skip if destination already exists
-                if (destFile.exists()) {
-                    updatedList[i] = previewItem.copy(
-                        status = RenameStatus.FAILED,
-                        errorMessage = "Destination file already exists"
-                    )
-                    when (previewItem.mediaItem) {
-                        is MediaItem.Movie -> skippedMovieCount++
-                        is MediaItem.TvEpisode -> skippedTvCount++
-                    }
-                    withContext(Dispatchers.Main) {
-                        addLog("⚠️ Skipped: Destination already exists: ${previewItem.proposedName}")
-                        scannedItems = updatedList.toList()
-                    }
-                    continue
-                }
-
-                try {
-                    // Record parent dir for empty folder cleanup
-                    sourceFile.parentFile?.let { sourceDirsToClean.add(it) }
-
-                    // Create parent folders if necessary
-                    destFile.parentFile?.mkdirs()
-
-                    withContext(Dispatchers.IO) {
-                        Files.move(sourceFile.toPath(), destFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
-                    }
-
-                    // Move companion subtitles if present
-                    val usedNames = mutableSetOf<String>()
-                    val existingSubs = destFile.parentFile?.listFiles { f -> MediaScanner.isSubtitleFile(f) }?.map { it.name } ?: emptyList()
-                    usedNames.addAll(existingSubs)
-
-                    for (subFile in previewItem.mediaItem.companionSubtitles) {
-                        if (subFile.exists()) {
-                            val subDestName = computeSubtitleDestName(subFile, previewItem.proposedName, usedNames)
-                            usedNames.add(subDestName)
-                            val subDestFile = File(destFile.parentFile, subDestName)
-                            if (!subDestFile.exists()) {
-                                try {
-                                    withContext(Dispatchers.IO) {
-                                        Files.move(subFile.toPath(), subDestFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
-                                    }
-                                    withContext(Dispatchers.Main) {
-                                        addLog("   📄 Subtitle moved: ${subFile.name} → $subDestName")
-                                    }
-                                } catch (subEx: Exception) {
-                                    withContext(Dispatchers.Main) {
-                                        addLog("   ⚠️ Subtitle move error: ${subEx.message}")
-                                    }
-                                }
-                            }
+            val updatedList = scannedItems.toMutableList()
+            val result = withContext(Dispatchers.IO) {
+                MediaBatchExecutor.executeBatch(
+                    items = scannedItems,
+                    transactionDao = transactionDao,
+                    onItemUpdated = { index, updatedItem ->
+                        updatedList[index] = updatedItem
+                        val snapshot = updatedList.toList()
+                        viewModelScope.launch(Dispatchers.Main) {
+                            scannedItems = snapshot
+                        }
+                    },
+                    onLog = { logMsg ->
+                        viewModelScope.launch(Dispatchers.Main) {
+                            addLog(logMsg)
                         }
                     }
-
-                    updatedList[i] = previewItem.copy(status = RenameStatus.SUCCESS)
-
-                    when (previewItem.mediaItem) {
-                        is MediaItem.Movie -> movieCount++
-                        is MediaItem.TvEpisode -> tvCount++
-                    }
-
-                    withContext(Dispatchers.Main) {
-                        addLog("✅ Moved: ${previewItem.mediaItem.originalName} → ${previewItem.proposedName}")
-                        scannedItems = updatedList.toList()
-                    }
-                } catch (e: Exception) {
-                    updatedList[i] = previewItem.copy(
-                        status = RenameStatus.FAILED,
-                        errorMessage = e.message
-                    )
-                    withContext(Dispatchers.Main) {
-                        addLog("❌ Error moving ${previewItem.mediaItem.originalName}: ${e.message}")
-                        scannedItems = updatedList.toList()
-                    }
-                }
+                )
             }
 
-            // Cleanup empty parent directories of moved source files up to basePath
-            if (!dryRunMode) {
-                val baseFile = File(basePath)
-                if (baseFile.exists()) {
-                    for (dir in sourceDirsToClean) {
-                        removeEmptyParents(dir, baseFile) { logMsg ->
-                            viewModelScope.launch(Dispatchers.Main) {
-                                addLog(logMsg)
-                            }
-                        }
-                    }
-                }
-            }
-
-            val elapsedMillis = System.currentTimeMillis() - startTime
-            val seconds = (elapsedMillis / 1000) % 60
-            val minutes = (elapsedMillis / (1000 * 60)) % 60
-            val hours = (elapsedMillis / (1000 * 60 * 60)) % 24
+            val seconds = (result.elapsedMillis / 1000) % 60
+            val minutes = (result.elapsedMillis / (1000 * 60)) % 60
+            val hours = (result.elapsedMillis / (1000 * 60 * 60)) % 24
             val durationString = String.format("%02d:%02d:%02d", hours, minutes, seconds)
 
+            AppPreferences.setLastScanSubtitle(
+                getApplication(),
+                "Moved ${result.movieCount + result.tvCount} file(s)"
+            )
+            WatchdogScanWorker.requestTileRefresh(getApplication())
+
             withContext(Dispatchers.Main) {
-                movedMovies = movieCount
-                movedTv = tvCount
-                skippedMovies = skippedMovieCount
-                skippedTv = skippedTvCount
+                movedMovies = result.movieCount
+                movedTv = result.tvCount
+                skippedMovies = result.skippedMovieCount
+                skippedTv = result.skippedTvCount
+                lastExecutedBatchId = result.batchId
                 executionTime = durationString
                 isRenaming = false
             }
+        }
+    }
 
-            // AUTO CLEANUP AT THE END - only if not dry run
-            if (!dryRunMode) {
-                runJunkAndEmptyCleanupInternal()
-            } else {
+    fun undoBatch(batchId: Long) {
+        if (isScanning || isRenaming || isCleaning || isUndoing) return
+        isUndoing = true
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val undoResult = MediaBatchExecutor.undoBatch(
+                batchId = batchId,
+                transactionDao = transactionDao,
+                movieDir = movieDir,
+                tvDir = tvDir,
+                onLog = { msg ->
+                    viewModelScope.launch(Dispatchers.Main) {
+                        addLog(msg)
+                    }
+                }
+            )
+            withContext(Dispatchers.Main) {
+                if (undoResult.markedUndone) {
+                    if (lastExecutedBatchId == batchId) {
+                        lastExecutedBatchId = null
+                        executionTime = ""
+                    }
+                    scannedItems = emptyList()
+                }
+                isUndoing = false
+            }
+        }
+    }
+
+    fun undoLatestBatch() {
+        val batch = latestActiveBatch ?: return
+        undoBatch(batch.batch.id)
+    }
+
+    fun clearTransactionHistory() {
+        viewModelScope.launch(Dispatchers.IO) {
+            transactionDao.clearAllHistory()
+            withContext(Dispatchers.Main) {
+                lastExecutedBatchId = null
+                addLog("🗑️ Cleared transaction undo history.")
+            }
+        }
+    }
+
+    fun exportLogsToUri(uri: Uri, asJson: Boolean, onComplete: (Boolean, String) -> Unit) {
+        val currentLogs = logs.toList()
+        val config = currentConfig()
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val device = "${Build.MANUFACTURER} ${Build.MODEL}".trim()
+                val content = if (asJson) {
+                    LogExporter.formatAsJson(
+                        logs = currentLogs,
+                        config = config,
+                        device = device,
+                        sdkInt = Build.VERSION.SDK_INT
+                    )
+                } else {
+                    LogExporter.formatAsText(
+                        logs = currentLogs,
+                        config = config,
+                        device = device,
+                        sdkInt = Build.VERSION.SDK_INT
+                    )
+                }
+
+                val resolver = getApplication<Application>().contentResolver
+                resolver.openOutputStream(uri)?.use { stream ->
+                    stream.write(content.toByteArray(Charsets.UTF_8))
+                } ?: throw IllegalStateException("Could not open output stream")
+
+                val msg = "✅ Exported ${currentLogs.size} log lines (${if (asJson) "JSON" else "TXT"})."
                 withContext(Dispatchers.Main) {
-                    addLog("[DRY RUN] Skipping actual file operations. Review the log above for planned actions.")
+                    addLog(msg)
+                    onComplete(true, msg)
+                }
+            } catch (e: Exception) {
+                val msg = "❌ Log export failed: ${e.message}"
+                withContext(Dispatchers.Main) {
+                    addLog(msg)
+                    onComplete(false, msg)
+                }
+            }
+        }
+    }
+
+    fun exportConfigToUri(uri: Uri, onComplete: (Boolean, String) -> Unit) {
+        val config = currentConfig()
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val json = ConfigBackupManager.exportConfigToJson(config)
+                val resolver = getApplication<Application>().contentResolver
+                resolver.openOutputStream(uri)?.use { stream ->
+                    stream.write(json.toByteArray(Charsets.UTF_8))
+                } ?: throw IllegalStateException("Could not open output stream")
+
+                val msg = "✅ Exported configuration backup JSON."
+                withContext(Dispatchers.Main) {
+                    addLog(msg)
+                    onComplete(true, msg)
+                }
+            } catch (e: Exception) {
+                val msg = "❌ Config export failed: ${e.message}"
+                withContext(Dispatchers.Main) {
+                    addLog(msg)
+                    onComplete(false, msg)
+                }
+            }
+        }
+    }
+
+    fun importConfigFromUri(uri: Uri, onComplete: (Boolean, String) -> Unit) {
+        val current = currentConfig()
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val resolver = getApplication<Application>().contentResolver
+                val json = resolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use {
+                    it.readText()
+                } ?: throw IllegalStateException("Could not open input stream")
+
+                val imported = ConfigBackupManager.importConfigFromJson(json, current)
+                AppPreferences.saveConfig(getApplication(), imported)
+                WatchdogScheduler.syncWithConfig(getApplication(), imported)
+
+                val msg = "✅ Restored configuration backup (paths, exclusions, junk, templates)."
+                withContext(Dispatchers.Main) {
+                    applyConfig(imported)
+                    addLog(msg)
+                    onComplete(true, msg)
+                }
+            } catch (e: Exception) {
+                val msg = "❌ Config import failed: ${e.message}"
+                withContext(Dispatchers.Main) {
+                    addLog(msg)
+                    onComplete(false, msg)
                 }
             }
         }
     }
 
     fun runJunkAndEmptyCleanup() {
-        if (isCleaning || isScanning || isRenaming) return
+        if (isCleaning || isScanning || isRenaming || isUndoing) return
         isCleaning = true
         clearLogs()
         addLog("🧹 STANDALONE CLEANUP STARTED")
-        viewModelScope.launch(Dispatchers.Default) {
-            runJunkAndEmptyCleanupInternal()
+
+        val pathsToClean = junkPaths.toList()
+        viewModelScope.launch(Dispatchers.IO) {
+            CleanupExecutor.executeCleanup(
+                junkPaths = pathsToClean,
+                rootDir = File("/storage/emulated/0"),
+                trashRootDir = getCleanupTrashDir(),
+                cleanupDao = cleanupDao,
+                onLog = { msg ->
+                    viewModelScope.launch(Dispatchers.Main) {
+                        addLog(msg)
+                    }
+                }
+            )
             withContext(Dispatchers.Main) {
                 isCleaning = false
             }
         }
     }
 
-    private suspend fun runJunkAndEmptyCleanupInternal() {
-        withContext(Dispatchers.Main) {
-            addLog("🧹 CLEANING JUNK DIRECTORIES & EMPTY FOLDERS...")
-        }
+    fun undoCleanupBatch(batchId: Long) {
+        if (isScanning || isRenaming || isCleaning || isUndoing) return
+        isUndoing = true
 
-        // 1. Remove specific junk paths recursively
-        for (path in junkPaths) {
-            val file = File(path)
-            if (file.exists()) {
-                try {
-                    val deleted = withContext(Dispatchers.IO) {
-                        file.deleteRecursively()
-                    }
-                    if (deleted) {
-                        withContext(Dispatchers.Main) {
-                            addLog("🗑️ Removed Junk Folder: $path")
-                        }
-                    }
-                } catch (e: Exception) {
-                    withContext(Dispatchers.Main) {
-                        addLog("⚠️ Failed to remove junk path $path: ${e.message}")
+        viewModelScope.launch(Dispatchers.IO) {
+            CleanupExecutor.undoCleanupBatch(
+                batchId = batchId,
+                cleanupDao = cleanupDao,
+                onLog = { msg ->
+                    viewModelScope.launch(Dispatchers.Main) {
+                        addLog(msg)
                     }
                 }
-            }
-        }
-
-        // 2. Remove empty directories bottom-up under /storage/emulated/0
-        val rootPath = "/storage/emulated/0"
-        withContext(Dispatchers.Main) {
-            addLog("Scanning for empty folders recursively in $rootPath...")
-        }
-
-        val deletedEmptyDirs = mutableListOf<String>()
-        try {
-            val rootFile = File(rootPath)
-            if (rootFile.exists() && rootFile.isDirectory) {
-                withContext(Dispatchers.IO) {
-                    deleteEmptyDirectoriesRecursive(rootFile, deletedEmptyDirs)
-                }
-            }
-        } catch (e: Exception) {
+            )
             withContext(Dispatchers.Main) {
-                addLog("⚠️ Error during empty folder scan: ${e.message}")
+                isUndoing = false
             }
-        }
-
-        withContext(Dispatchers.Main) {
-            if (deletedEmptyDirs.isNotEmpty()) {
-                addLog("🧹 Deleted ${deletedEmptyDirs.size} empty directories:")
-                for (d in deletedEmptyDirs) {
-                    addLog("   🗑️ $d")
-                }
-            } else {
-                addLog("ℹ️ No empty directories found.")
-            }
-            addLog("🎉 CLEANUP TASK COMPLETED SUCCESSFULLY!")
         }
     }
 
-    private fun deleteEmptyDirectoriesRecursive(currentDir: File, deletedList: MutableList<String>) {
-        val files = currentDir.listFiles() ?: return
+    fun undoLatestCleanupBatch() {
+        val batch = latestActiveCleanupBatch ?: return
+        undoCleanupBatch(batch.batch.id)
+    }
 
-        // Post-order traversal (bottom-up), check children first
-        for (file in files) {
-            if (file.isDirectory) {
-                val absolutePath = file.absolutePath
-                // Keep Android system folders and camera pictures completely safe!
-                if (absolutePath.startsWith("/storage/emulated/0/Android") ||
-                    absolutePath.startsWith("/storage/emulated/0/DCIM")
-                ) {
-                    continue
-                }
-
-                // Recursively check children
-                deleteEmptyDirectoriesRecursive(file, deletedList)
-            }
-        }
-
-        // Check if current directory is now empty and not the root /storage/emulated/0
-        val path = currentDir.absolutePath
-        if (path != "/storage/emulated/0" &&
-            !path.startsWith("/storage/emulated/0/Android") &&
-            !path.startsWith("/storage/emulated/0/DCIM")
-        ) {
-            val remainingFiles = currentDir.listFiles()
-            if (remainingFiles != null && remainingFiles.isEmpty()) {
-                try {
-                    val deleted = currentDir.delete()
-                    if (deleted) {
-                        deletedList.add(path)
+    fun clearCleanupHistory() {
+        if (isCleaning || isUndoing) return
+        viewModelScope.launch(Dispatchers.IO) {
+            CleanupExecutor.clearCleanupHistory(
+                cleanupDao = cleanupDao,
+                trashRootDir = getCleanupTrashDir(),
+                onLog = { msg ->
+                    viewModelScope.launch(Dispatchers.Main) {
+                        addLog(msg)
                     }
-                } catch (e: Exception) {
-                    // Fail silently
                 }
+            )
+        }
+    }
+
+    fun runFindAndReplace(folder: String, findText: String, replaceText: String) {
+        if (isCleaning || isScanning || isRenaming || isUndoing) return
+        isCleaning = true
+        clearLogs()
+        addLog("❖ FILE RENAME UTILITY ❖")
+        addLog("📁 Target Directory : $folder")
+        addLog("🔍 Text to Find     : '$findText'")
+        addLog("✏️  Replace With     : '${if (replaceText.isNotEmpty()) replaceText else "[DELETING TEXT]"}'")
+        addLog("─".repeat(60))
+
+        viewModelScope.launch(Dispatchers.Default) {
+            var renameCount = 0
+            val dir = File(folder)
+
+            if (!dir.exists() || !dir.isDirectory) {
+                withContext(Dispatchers.Main) {
+                    addLog("❌ ERROR: The directory '$folder' does not exist or is not a directory.")
+                    isCleaning = false
+                }
+                return@launch
+            }
+
+            withContext(Dispatchers.Main) {
+                addLog("⏳ Scanning directory tree...")
+            }
+
+            try {
+                dir.walkTopDown().forEach { file ->
+                    if (file.isFile && file.name.contains(findText)) {
+                        val newName = file.name.replace(findText, replaceText)
+                        val newFile = File(file.parentFile, newName)
+
+                        try {
+                            if (file.renameTo(newFile)) {
+                                renameCount++
+                                withContext(Dispatchers.Main) {
+                                    addLog("🔹 Old: ${file.name}")
+                                    addLog("🔸 New: $newName")
+                                }
+                            } else {
+                                withContext(Dispatchers.Main) {
+                                    addLog("❌ ERROR renaming '${file.name}'")
+                                }
+                            }
+                        } catch (e: Exception) {
+                            withContext(Dispatchers.Main) {
+                                addLog("❌ ERROR renaming '${file.name}': ${e.message}")
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    addLog("❌ ERROR during scan: ${e.message}")
+                }
+            }
+
+            withContext(Dispatchers.Main) {
+                addLog("═".repeat(60))
+                addLog("❖ TASK FINISHED")
+                if (renameCount > 0) {
+                    addLog("🎉 Total files successfully renamed: $renameCount")
+                } else {
+                    addLog("ℹ No files matching '$findText' were found to rename.")
+                }
+                isCleaning = false
             }
         }
     }

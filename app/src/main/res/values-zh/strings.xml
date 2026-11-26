@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">媒体管理器</string>
+    <string name="text_to_find">要查找的文本</string>
+    <string name="app_language">应用语言</string>
+    <string name="close">关闭</string>
+    <string name="target_directory">目标目录</string>
+    <string name="no_items_match_filter">没有项目与您的过滤器匹配。</string>
+    <string name="clear">清除</string>
+    <string name="media_organiser">⚡ 媒体管理器</string>
+    <string name="add">添加</string>
+    <string name="scan">扫描</string>
+    <string name="run">运行</string>
+    <string name="find_replace">查找与替换</string>
+    <string name="sort">排序: </string>
+    <string name="change">更改</string>
+    <string name="cancel">取消</string>
+    <string name="cyberpunk_console_log_viewport">⚡ 赛博朋克控制台日志视图</string>
+    <string name="developed_by">开发由</string>
+    <string name="settings">设置</string>
+    <string name="system_active_ready">系统处于活动状态。准备进行文件排序、TVMaze索引或独立设备清理扫描。</string>
+    <string name="find_replace_btn">查找与替换</string>
+    <string name="junk_cleanup_btn">垃圾清理</string>
+    <string name="cleanup">清理</string>
+    <string name="organize">整理</string>
+    <string name="scan_directory_desc">扫描目录以列出并重命名电影或电视剧。\n使用清理选项卡安全地清除空文件夹。</string>
+    <string name="replace_with">替换为</string>
+    <string name="dastgir_siddiq">Dastgir Siddiq</string>
+    <string name="ready_to_scan">✨ 准备扫描</string>
+    <string name="add_new_path_keyword">添加新路径关键字...</string>
+    <string name="clear_capital">清除</string>
+    <string name="excluded_paths">排除的路径（扫描时忽略）</string>
+    <string name="junk_folders">垃圾文件夹（清理期间删除）</string>
+    <string name="source_directory">源目录</string>
+    <string name="movies_target">电影目标</string>
+    <string name="tv_series_target">电视剧目标</string>
+</resources>

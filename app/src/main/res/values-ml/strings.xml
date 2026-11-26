@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">മീഡിയ ഓർഗനൈസർ</string>
+    <string name="text_to_find">കണ്ടെത്തേണ്ട വാചകം</string>
+    <string name="app_language">ആപ്പ് ഭാഷ</string>
+    <string name="close">അടയ്ക്കുക</string>
+    <string name="target_directory">ലക്ഷ്യ ഡയറക്ടറി</string>
+    <string name="no_items_match_filter">നിങ്ങളുടെ ഫിൽട്ടറുമായി ഇനങ്ങൾ പൊരുത്തപ്പെടുന്നില്ല.</string>
+    <string name="clear">മായ്ക്കുക</string>
+    <string name="media_organiser">⚡ മീഡിയ ഓർഗനൈസർ</string>
+    <string name="add">ചേർക്കുക</string>
+    <string name="scan">സ്കാൻ</string>
+    <string name="run">റൺ</string>
+    <string name="find_replace">കണ്ടെത്തുക &amp; മാറ്റിസ്ഥാപിക്കുക</string>
+    <string name="sort">തരംതിരിക്കുക: </string>
+    <string name="change">മാറ്റുക</string>
+    <string name="cancel">റദ്ദാക്കുക</string>
+    <string name="cyberpunk_console_log_viewport">⚡ സൈബർപങ്ക് കൺസോൾ ലോഗ് വ്യൂപോർട്ട്</string>
+    <string name="developed_by">വികസിപ്പിച്ചത്</string>
+    <string name="settings">ക്രമീകരണങ്ങൾ</string>
+    <string name="system_active_ready">സിസ്റ്റം സജീവമാണ്. ഫയൽ അടുക്കൽ, TVMaze ഇൻഡെക്സിംഗ്, അല്ലെങ്കിൽ ഉപകരണം വൃത്തിയാക്കാൻ തയ്യാറാണ്.</string>
+    <string name="find_replace_btn">കണ്ടെത്തുക &amp; മാറ്റിസ്ഥാപിക്കുക</string>
+    <string name="junk_cleanup_btn">ജങ്ക് വൃത്തിയാക്കൽ</string>
+    <string name="cleanup">വൃത്തിയാക്കൽ</string>
+    <string name="organize">ഓർഗനൈസുചെയ്യുക</string>
+    <string name="scan_directory_desc">സിനിമകളോ ടിവി സീരീസുകളോ ലിസ്റ്റുചെയ്യാനും പേരുമാറ്റാനും ഡയറക്ടറി സ്കാൻ ചെയ്യുക.\nശൂന്യമായ ഫോൾഡറുകൾ സുരക്ഷിതമായി മായ്‌ക്കാൻ ക്ലീനപ്പ് ടാബ് ഉപയോഗിക്കുക.</string>
+    <string name="replace_with">ഇതുപയോഗിച്ച് മാറ്റിസ്ഥാപിക്കുക</string>
+    <string name="dastgir_siddiq">ദസ്തഗീർ സിദ്ദിഖ്</string>
+    <string name="ready_to_scan">✨ സ്കാൻ ചെയ്യാൻ തയ്യാറാണ്</string>
+    <string name="add_new_path_keyword">പുതിയ പാത്ത് കീവേഡ് ചേർക്കുക...</string>
+    <string name="clear_capital">മായ്ക്കുക</string>
+    <string name="excluded_paths">ഒഴിവാക്കിയ പാതകൾ (സ്കാൻ സമയത്ത് അവഗണിച്ചു)</string>
+    <string name="junk_folders">ജങ്ക് ഫോൾഡറുകൾ (വൃത്തിയാക്കുമ്പോൾ ഇല്ലാതാക്കി)</string>
+    <string name="source_directory">ഉറവിട ഡയറക്ടറി</string>
+    <string name="movies_target">സിനിമകളുടെ ലക്ഷ്യം</string>
+    <string name="tv_series_target">ടിവി സീരീസ് ലക്ഷ്യം</string>
+</resources>

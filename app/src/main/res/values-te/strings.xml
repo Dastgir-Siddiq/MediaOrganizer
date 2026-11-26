@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">మీడియా ఆర్గనైజర్</string>
+    <string name="text_to_find">కనుగొనాల్సిన వచనం</string>
+    <string name="app_language">యాప్ భాష</string>
+    <string name="close">మూసివేయు</string>
+    <string name="target_directory">లక్ష్య డైరెక్టరీ</string>
+    <string name="no_items_match_filter">మీ ఫిల్టర్‌కు ఏ వస్తువులూ సరిపోలలేదు.</string>
+    <string name="clear">క్లియర్</string>
+    <string name="media_organiser">⚡ మీడియా ఆర్గనైజర్</string>
+    <string name="add">జోడించు</string>
+    <string name="scan">స్కాన్</string>
+    <string name="run">రన్</string>
+    <string name="find_replace">కనుగొను &amp; భర్తీ చేయి</string>
+    <string name="sort">క్రమబద్ధీకరించు: </string>
+    <string name="change">మార్చు</string>
+    <string name="cancel">రద్దు చేయి</string>
+    <string name="cyberpunk_console_log_viewport">⚡ సైబర్‌పంక్ కన్సోల్ లాగ్ వ్యూపోర్ట్</string>
+    <string name="developed_by">అభివృద్ధి చేసినవారు</string>
+    <string name="settings">సెట్టింగ్‌లు</string>
+    <string name="system_active_ready">సిస్టమ్ యాక్టివ్. ఫైల్ క్రమబద్ధీకరణ, TVMaze ఇండెక్సింగ్ లేదా పరికర శుభ్రపరచడానికి సిద్ధంగా ఉంది.</string>
+    <string name="find_replace_btn">కనుగొను &amp; భర్తీ చేయి</string>
+    <string name="junk_cleanup_btn">జంక్ క్లీనప్</string>
+    <string name="cleanup">క్లీనప్</string>
+    <string name="organize">ఆర్గనైజ్</string>
+    <string name="scan_directory_desc">సినిమాలు లేదా టీవీ సిరీస్‌లను జాబితా చేయడానికి మరియు పేరు మార్చడానికి డైరెక్టరీని స్కాన్ చేయండి.\nఖాళీ ఫోల్డర్‌లను సురక్షితంగా క్లియర్ చేయడానికి క్లీనప్ ట్యాబ్‌ని ఉపయోగించండి.</string>
+    <string name="replace_with">దీనితో భర్తీ చేయి</string>
+    <string name="dastgir_siddiq">దస్తగిర్ సిద్ధిక్</string>
+    <string name="ready_to_scan">✨ స్కాన్ చేయడానికి సిద్ధంగా ఉంది</string>
+    <string name="add_new_path_keyword">కొత్త మార్గం కీవర్డ్ జోడించండి...</string>
+    <string name="clear_capital">క్లియర్</string>
+    <string name="excluded_paths">మినహాయించబడిన మార్గాలు (స్కాన్ సమయంలో విస్మరించబడ్డాయి)</string>
+    <string name="junk_folders">జంక్ ఫోల్డర్‌లు (క్లీనప్ సమయంలో తొలగించబడ్డాయి)</string>
+    <string name="source_directory">మూల డైరెక్టరీ</string>
+    <string name="movies_target">సినిమాల లక్ష్యం</string>
+    <string name="tv_series_target">టీవీ సిరీస్ లక్ష్యం</string>
+</resources>

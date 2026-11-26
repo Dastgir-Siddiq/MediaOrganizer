@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Media Organizer</string>
+    <string name="text_to_find">Text to Find</string>
+    <string name="app_language">App Language</string>
+    <string name="close">CLOSE</string>
+    <string name="target_directory">Target Directory</string>
+    <string name="no_items_match_filter">No items match your filter.</string>
+    <string name="clear">CLEAR</string>
+    <string name="media_organiser">⚡ Media Organiser</string>
+    <string name="add">ADD</string>
+    <string name="scan">SCAN</string>
+    <string name="run">RUN</string>
+    <string name="find_replace">Find &amp; Replace</string>
+    <string name="sort">Sort: </string>
+    <string name="change">Change</string>
+    <string name="cancel">CANCEL</string>
+    <string name="cyberpunk_console_log_viewport">⚡ Cyberpunk Console Log Viewport</string>
+    <string name="developed_by">Developed by</string>
+    <string name="settings">Settings</string>
+    <string name="system_active_ready">SYSTEM ACTIVE. Ready for file sorting, TVMaze indexing, or standalone device cleanup sweeps.</string>
+    <string name="find_replace_btn">FIND &amp; REPLACE</string>
+    <string name="junk_cleanup_btn">Junk Cleanup</string>
+    <string name="cleanup">Cleanup</string>
+    <string name="organize">Organize</string>
+    <string name="scan_directory_desc">Scan directory to list and rename Movies or TV Series.\nUse the Cleanup tab to clear empty folders safely.</string>
+    <string name="replace_with">Replace With</string>
+    <string name="dastgir_siddiq">Dastgir Siddiq</string>
+    <string name="ready_to_scan">✨ Ready to Scan</string>
+    <string name="add_new_path_keyword">Add new path keyword...</string>
+    <string name="clear_capital">Clear</string>
+    <string name="excluded_paths">Excluded Paths (Ignored during scan)</string>
+    <string name="junk_folders">Junk Folders (Deleted during cleanup)</string>
+    <string name="source_directory">Source Directory</string>
+    <string name="movies_target">Movies Target</string>
+    <string name="tv_series_target">TV Series Target</string>
+    <string name="qs_tile_scan">Scan Media</string>
+</resources>

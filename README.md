@@ -1,65 +1,125 @@
-# MediaOrganizer
+# ⚡ MediaOrganizer
 
-MediaOrganizer is an intelligent, automated Android application built with Kotlin and Jetpack Compose that takes the hassle out of organizing your downloaded movies and TV series. It scans unstructured media folders, automatically identifies and fetches metadata (like TV episode titles) from the web, cleanly renames your files, and moves them to structured libraries.
+MediaOrganizer is an intelligent, automated Android application built with Kotlin and Jetpack Compose (Material 3) that takes the hassle out of organizing your downloaded movies and TV series. It scans unstructured media folders, automatically identifies and fetches metadata (such as verified TV episode titles) from the web, cleanly renames your files with customizable naming templates, and moves them to structured libraries.
 
-**Developed by Dastgir Siddiq**
+**Developed by [Dastgir Siddiq](https://github.com/Dastgir-Siddiq)**
+
+---
 
 ## ✨ Features
 
-- **Intelligent Media Scanning:**
-  Automatically distinguishes between Movies and TV Series based on filenames (e.g., matching standard `S01E01` or `1x01` formats).
-  
-- **Automated Metadata Fetching:**
-  Fetches episode names directly from the [TVMaze API](https://www.tvmaze.com/api). If TVMaze doesn't have the data, it seamlessly falls back to scraping Wikipedia for the episode list.
-  
-- **Clean File Renaming & Moving:**
-  - **Movies:** Renames to `Movie Title (Year).ext`
-  - **TV Series:** Organizes into designated Season folders (`TV Series Name/Season 01/`) and renames files to `Show Name S01E01 - Episode Title.ext`.
-  
-- **Advanced Subtitle Handling:**
-  Recognizes multiple subtitle files associated with a video (e.g., `.en.srt`, `.es.srt`, `.2.srt`) and moves them alongside the video, maintaining their language and identifier tags perfectly synchronized with the newly generated video name.
-  
-- **Junk Cleanup Utility:**
-  Includes a built-in cleanup tool that scans your device for specified junk folders (like `.thumbnails`, caches, and hidden system folders) and deletes them, freeing up space. It also cleans up any empty folders left behind after moving your media files.
-  
-- **Fully Customizable Paths:**
-  Configure your Source Directory, Movies Target Directory, and TV Series Target Directory directly within the app. You can also customize Excluded Paths to ignore certain folders during scans, and manage your list of Junk Folders.
+### 🔍 Intelligent Media Scanning & Camera Exclusion
+- **Smart Classification:** Automatically distinguishes between Movies (`Title (Year)`) and TV Series (`S01E01`, `1x01`) based on standard release patterns.
+- **Camera & Recording Filter:** Automatically detects and excludes personal camera recordings, DCIM folders, screen captures, voice notes, and burst photos (e.g. `Recording (1) 2024.mp4`, `VID_2024...`, `PXL_...`, `IMG_...`), ensuring your personal media is never misclassified or moved.
 
-- **Cyberpunk Material3 UI:**
-  Features a sleek, dark-themed UI built with Jetpack Compose Material3, featuring a live terminal log view, scan progress tracking, and detailed preview cards before you commit to moving files.
+### 🏷️ Custom Naming Templates & Audio Languages
+- **Flexible Template System:** Fully customize how movies and TV series are renamed in Settings with dynamic placeholders:
+  - `{title}`, `{year}`, `{show}`, `{season}`, `{episode}`, `{episode_title}`
+  - `{resolution}` (e.g. `1080p`, `2160p`, `4K`, `720p`)
+  - `{codec}` (e.g. `x265`, `HEVC`, `x264`, `AVC`)
+  - `{audio}` (e.g. `AAC`, `DTS`, `Atmos`, `DD5.1`, `AC3`)
+  - `{audio_languages}` / `{language}` (e.g. `Hindi`, `English`, `Telugu`, `Tamil`, `Multi`, `Dual-Audio`)
+  - `{source}` (e.g. `BluRay`, `WEB-DL`, `WEBRip`, `HDTV`)
+  - `{hdr}` (e.g. `HDR`, `DV`, `HDR10+`)
+  - `{edition}` (e.g. `Remastered`, `Director's Cut`, `Extended`)
+- **Audio Language Detection:** Accurately extracts audio languages embedded in filenames while safely ignoring subtitle-only language tags.
 
-## 🚀 Usage
+### 🔄 One-Tap Undo & Transaction History
+- **Organize Undo:** Every organize batch is recorded in a local SQLite/Room database (including original path, new path, synchronized subtitle paths, and batch timestamp). Revert any batch with a single tap to restore all files and subtitles to their exact original locations and remove newly created directories.
+- **Cleanup Undo:** Junk cleanup batches stage removed files in a secure trash directory and track deleted empty folders, allowing full reversal of any cleanup operation.
 
-### 1. Configure Settings
-Open the **Settings ⚙️** tab to set your paths:
-- **Source Directory:** The folder where your downloaded/unorganized files reside.
-- **Movies Target:** The destination library for your movies.
-- **TV Series Target:** The destination library for your TV shows.
+### ⚡ Offline Metadata Cache (90-Day TTL)
+- Background caching for TVMaze API and Wikipedia episode metadata stored in Room.
+- Re-scans become instant, API rate limits are avoided, and media renaming functions completely offline for previously queried TV shows.
 
-*You can also configure which folders should be ignored during scans, and which folders the Cleanup tool should target.*
+### 🐕 Background Watchdog (WorkManager)
+- Periodically scans your configured Source Directory in the background when the phone is idle or charging.
+- Sends an interactive notification showing newly detected files with direct actions:
+  - **Preview:** Opens the app directly to the preview list.
+  - **Organize Now:** Processes and organizes the files immediately in the background without needing to keep the UI open.
 
-### 2. Organize Media
-1. Go to the **Organize 🎬** tab.
-2. Tap **SCAN**. The app will analyze the Source Directory, fetch episode metadata, and generate a preview of how files will be renamed.
-3. Review the items in the preview list. You can filter by Movies/TV or search by name.
-4. Tap **RENAME & MOVE** to execute the changes. The terminal will log the progress as files are moved to their target directories.
+### 🎛️ Quick Settings Tile
+- Includes an Android Quick Settings tile (`Media Scan`) allowing you to trigger an immediate background scan of your Source Directory directly from your system quick settings panel.
 
-### 3. Cleanup Junk
-1. Go to the **Cleanup 🧹** tab.
-2. Tap **RUN JUNK CLEANUP**.
-3. The app will remove the specified junk folders and delete any empty directories left behind in your Source Directory.
+### 📋 Live Terminal Logs & Backup/Restore Configuration
+- **Terminal Log Export:** View a real-time console log of all scanning, metadata fetching, and file operations. Export the complete terminal log as `.txt` or `.json` for debugging and diagnostic reporting.
+- **Config Backup & Restore:** Export all configured paths, exclusions, junk folder definitions, and custom naming templates into a single portable JSON file, and restore it at any time.
 
-## 🛠️ Built With
-* Kotlin
-* Jetpack Compose (Material3)
-* Kotlin Coroutines & Flow
-* Jsoup (for Wikipedia HTML parsing)
-* JSON parsing (for TVMaze API)
+### 🌐 Multi-Language Localization
+- Full in-app language switching supporting:
+  - English
+  - Hindi (हिन्दी)
+  - Telugu (తెలుగు)
+  - Tamil (தமிழ்)
+  - Kannada (ಕನ್ನಡ)
+  - Malayalam (മലയാളം)
+  - Simplified Chinese (简体中文)
 
-## 📦 Building
+### 🎬 Accurate Metadata & Subtitle Synchronization
+- **Accurate Episode Titles:** Multi-source metadata resolution combining TVMaze and Wikipedia table scrapers with uniform offset detection, preventing off-by-one or special-episode title shifts.
+- **Synchronized Subtitles:** Recognizes multiple subtitle files associated with a video (e.g., `.en.srt`, `.es.srt`, `.2.srt`) and moves them alongside the video, maintaining language tags synchronized with the newly formatted video name.
 
-To build the project locally using Gradle:
+---
+
+## 🚀 Usage Guide
+
+### 1. Configure Settings ⚙️
+Open the **Settings** tab to customize:
+- **Source Directory:** The directory where downloaded or unorganized media files reside.
+- **Movies Target Directory:** Destination library for movies.
+- **TV Series Target Directory:** Destination library for TV shows.
+- **Custom Naming Templates:** Define your custom template patterns for movies and TV episodes.
+- **Excluded Folders & Junk Folders:** Add custom folders to ignore during scans or target during cleanup.
+- **App Language:** Choose your preferred language.
+
+### 2. Organize Media 🎬
+1. Navigate to the **Organize** tab.
+2. Tap **SCAN**. MediaOrganizer analyzes files, filters out camera recordings, fetches episode titles from the cache or web, and renders a live preview.
+3. Filter or search by name, movie, or series.
+4. Tap **RENAME & MOVE** to execute the batch.
+5. If you ever need to revert, navigate to **Transaction History** and tap **UNDO**.
+
+### 3. Cleanup Junk 🧹
+1. Navigate to the **Cleanup** tab.
+2. Review the detected junk paths and empty folders.
+3. Tap **RUN JUNK CLEANUP**.
+4. Revert any cleanup batch at any time using the cleanup history undo button.
+
+---
+
+## 🛠️ Architecture & Tech Stack
+
+- **Language:** Kotlin 1.9.22
+- **UI Framework:** Jetpack Compose with Material 3 (Cyberpunk Neon Dark Theme)
+- **Database:** AndroidX Room 2.6.1 (with KSP code generator)
+- **Background Tasks:** AndroidX WorkManager 2.9.0
+- **Asynchronous Execution:** Kotlin Coroutines & StateFlow
+- **Web Scraping & APIs:** TVMaze REST API & Jsoup 1.17.2 for Wikipedia HTML table parsing
+- **Testing:** Comprehensive JUnit 4 test suite covering scanner regex, template formatting, batch undo, cleanup undo, episode title alignment, and config backup/restore.
+
+---
+
+## 📦 Building and Testing
+
+### Prerequisites
+- JDK 17 or JDK 21
+- Android SDK 34 (Android 14)
+
+### Run Unit Tests
+```bash
+./gradlew testDebugUnitTest
+```
+
+### Build Debug APK
 ```bash
 ./gradlew assembleDebug
 ```
-The APK will be available in `app/build/outputs/apk/debug/`.
+The compiled APK will be generated at:
+```
+app/build/outputs/apk/debug/app-debug.apk
+```
+
+---
+
+## 📄 License
+This project is developed and maintained by **Dastgir Siddiq**. All rights reserved.

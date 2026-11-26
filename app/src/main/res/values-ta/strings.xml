@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">மீடியா ஆர்கனைசர்</string>
+    <string name="text_to_find">கண்டுபிடிக்க வேண்டிய உரை</string>
+    <string name="app_language">பயன்பாட்டு மொழி</string>
+    <string name="close">மூடு</string>
+    <string name="target_directory">இலக்கு கோப்பகம்</string>
+    <string name="no_items_match_filter">உங்கள் வடிகட்டியுடன் உருப்படிகள் பொருந்தவில்லை.</string>
+    <string name="clear">அழி</string>
+    <string name="media_organiser">⚡ மீடியா ஆர்கனைசர்</string>
+    <string name="add">சேர்</string>
+    <string name="scan">ஸ்கேன்</string>
+    <string name="run">இயக்கு</string>
+    <string name="find_replace">கண்டுபிடி &amp; மாற்று</string>
+    <string name="sort">வரிசைப்படுத்து: </string>
+    <string name="change">மாற்று</string>
+    <string name="cancel">ரத்துசெய்</string>
+    <string name="cyberpunk_console_log_viewport">⚡ சைபர்பங்க் கன்சோல் பதிவு காட்சி</string>
+    <string name="developed_by">உருவாக்கியவர்</string>
+    <string name="settings">அமைப்புகள்</string>
+    <string name="system_active_ready">கணினி செயலில் உள்ளது. கோப்பு வரிசைப்படுத்துதல், TVMaze குறியீடாக்கம் அல்லது சாதனத்தை சுத்தம் செய்ய தயார்.</string>
+    <string name="find_replace_btn">கண்டுபிடி &amp; மாற்று</string>
+    <string name="junk_cleanup_btn">குப்பைகளை சுத்தம் செய்</string>
+    <string name="cleanup">சுத்தம் செய்</string>
+    <string name="organize">ஒழுங்கமை</string>
+    <string name="scan_directory_desc">திரைப்படங்கள் அல்லது டிவி தொடர்களைப் பட்டியலிட்டு மறுபெயரிட கோப்பகத்தை ஸ்கேன் செய்யவும்.\nகாலி கோப்புறைகளை பாதுகாப்பாக அழிக்க, சுத்தம் செய் தாவலைப் பயன்படுத்தவும்.</string>
+    <string name="replace_with">இதனுடன் மாற்று</string>
+    <string name="dastgir_siddiq">தஸ்தகிர் சித்திக்</string>
+    <string name="ready_to_scan">✨ ஸ்கேன் செய்ய தயார்</string>
+    <string name="add_new_path_keyword">புதிய பாதை முக்கிய சொல்லைச் சேர்...</string>
+    <string name="clear_capital">அழி</string>
+    <string name="excluded_paths">விலக்கப்பட்ட பாதைகள் (ஸ்கேன் செய்யும் போது புறக்கணிக்கப்பட்டது)</string>
+    <string name="junk_folders">குப்பை கோப்புறைகள் (சுத்தம் செய்யும் போது நீக்கப்பட்டது)</string>
+    <string name="source_directory">மூல கோப்பகம்</string>
+    <string name="movies_target">திரைப்படங்கள் இலக்கு</string>
+    <string name="tv_series_target">டிவி தொடர் இலக்கு</string>
+</resources>

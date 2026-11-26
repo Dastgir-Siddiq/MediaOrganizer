@@ -9,18 +9,24 @@ import android.os.Bundle
 import android.os.Environment
 import android.provider.Settings
 import android.widget.Toast
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
+import com.mediaorganizer.app.ui.CyanPrimary
 import com.mediaorganizer.app.ui.MediaOrganizerUi
 import com.mediaorganizer.app.ui.SlateBlack
-import com.mediaorganizer.app.ui.CyanPrimary
 import com.mediaorganizer.app.ui.VioletSecondary
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
+
+    private var pendingPreviewTrigger by mutableStateOf(false)
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -32,12 +38,31 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (!granted) {
+            Toast.makeText(this, "Notification permission allows Watchdog scan alerts", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        val viewModel = MediaOrganizerViewModel()
-        
+
+        WatchdogNotificationHelper.ensureChannel(this)
+        handleIncomingIntent(intent)
+
         setContent {
+            val viewModel: MediaOrganizerViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+
+            LaunchedEffect(pendingPreviewTrigger) {
+                if (pendingPreviewTrigger) {
+                    pendingPreviewTrigger = false
+                    viewModel.previewTriggerCount++
+                    viewModel.startScan()
+                }
+            }
+
             MaterialTheme(
                 colorScheme = darkColorScheme(
                     background = SlateBlack,
@@ -49,13 +74,25 @@ class MainActivity : ComponentActivity() {
                 MediaOrganizerUi(viewModel = viewModel)
             }
         }
-        
+
         checkAndRequestPermissions()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingIntent(intent)
+    }
+
+    private fun handleIncomingIntent(intent: Intent?) {
+        if (intent?.action == WatchdogNotificationHelper.ACTION_PREVIEW_SCAN) {
+            WatchdogNotificationHelper.cancelScanPrompt(this)
+            pendingPreviewTrigger = true
+        }
     }
 
     override fun onResume() {
         super.onResume()
-        // Re-check permissions when coming back to the app from settings
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (!Environment.isExternalStorageManager()) {
                 Toast.makeText(this, "All Files Access is required to scan and rename media", Toast.LENGTH_SHORT).show()
@@ -63,9 +100,20 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val granted = ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!granted) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+
     private fun checkAndRequestPermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            // Android 11+ requires MANAGE_EXTERNAL_STORAGE
             if (!Environment.isExternalStorageManager()) {
                 try {
                     val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
@@ -81,12 +129,13 @@ class MainActivity : ComponentActivity() {
                         Toast.makeText(this, "Could not open settings. Please grant All Files Access manually.", Toast.LENGTH_LONG).show()
                     }
                 }
+            } else {
+                requestNotificationPermissionIfNeeded()
             }
         } else {
-            // Android 10 and below requires normal runtime storage permissions
             val readPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
             val writePermission = ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
-            
+
             if (readPermission != PackageManager.PERMISSION_GRANTED || writePermission != PackageManager.PERMISSION_GRANTED) {
                 requestPermissionLauncher.launch(
                     arrayOf(

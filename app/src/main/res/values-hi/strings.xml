@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">मीडिया ऑर्गनाइज़र</string>
+    <string name="text_to_find">खोजने के लिए टेक्स्ट</string>
+    <string name="app_language">ऐप की भाषा</string>
+    <string name="close">बंद करें</string>
+    <string name="target_directory">लक्ष्य डायरेक्टरी</string>
+    <string name="no_items_match_filter">आपके फ़िल्टर से कोई आइटम मेल नहीं खाता।</string>
+    <string name="clear">साफ़ करें</string>
+    <string name="media_organiser">⚡ मीडिया ऑर्गनाइज़र</string>
+    <string name="add">जोड़ें</string>
+    <string name="scan">स्कैन</string>
+    <string name="run">चलाएं</string>
+    <string name="find_replace">खोजें और बदलें</string>
+    <string name="sort">क्रमबद्ध करें: </string>
+    <string name="change">बदलें</string>
+    <string name="cancel">रद्द करें</string>
+    <string name="cyberpunk_console_log_viewport">⚡ साइबरपंक कंसोल लॉग व्यूपोर्ट</string>
+    <string name="developed_by">द्वारा विकसित</string>
+    <string name="settings">सेटिंग्स</string>
+    <string name="system_active_ready">सिस्टम सक्रिय। फ़ाइल सॉर्टिंग, TVMaze इंडेक्सिंग या डिवाइस क्लीनअप के लिए तैयार।</string>
+    <string name="find_replace_btn">खोजें और बदलें</string>
+    <string name="junk_cleanup_btn">जंक क्लीनअप</string>
+    <string name="cleanup">क्लीनअप</string>
+    <string name="organize">व्यवस्थित करें</string>
+    <string name="scan_directory_desc">मूवीज़ या टीवी सीरीज़ की सूची बनाने और नाम बदलने के लिए डायरेक्टरी स्कैन करें।\nखाली फ़ोल्डर सुरक्षित रूप से हटाने के लिए क्लीनअप टैब का उपयोग करें।</string>
+    <string name="replace_with">इससे बदलें</string>
+    <string name="dastgir_siddiq">दस्तगीर सिद्दीक</string>
+    <string name="ready_to_scan">✨ स्कैन करने के लिए तैयार</string>
+    <string name="add_new_path_keyword">नया पाथ कीवर्ड जोड़ें...</string>
+    <string name="clear_capital">साफ़ करें</string>
+    <string name="excluded_paths">छोड़े गए पाथ (स्कैन के दौरान अनदेखे किए जाएंगे)</string>
+    <string name="junk_folders">जंक फ़ोल्डर (क्लीनअप के दौरान हटाए जाएंगे)</string>
+    <string name="source_directory">स्रोत डायरेक्टरी</string>
+    <string name="movies_target">मूवीज़ लक्ष्य</string>
+    <string name="tv_series_target">टीवी सीरीज़ लक्ष्य</string>
+    <string name="qs_tile_scan">मीडिया स्कैन</string>
+</resources>

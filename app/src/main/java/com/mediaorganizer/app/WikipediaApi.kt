@@ -4,13 +4,13 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
-import java.io.IOException
+import org.jsoup.nodes.Element
 import java.util.regex.Pattern
 
 object WikipediaApi {
 
     private val client = OkHttpClient.Builder().build()
-    
+
     private const val USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
     private const val WIKI_EPISODE_LIST_URL = "https://en.wikipedia.org/wiki/List_of_%s_episodes"
@@ -19,6 +19,7 @@ object WikipediaApi {
 
     private val TRAILING_YEAR_REGEX = Pattern.compile("\\s+(19|20)\\d{2}$")
     private val SEASON_HEADING_REGEX = Pattern.compile("Season\\s+(\\d+)", Pattern.CASE_INSENSITIVE)
+    private val FOOTNOTE_SUFFIX_REGEX = Regex("\\[[a-zA-Z0-9]+\\]")
 
     // Cache: show_name -> {season_num -> {ep_num -> title}}
     private val wikiCache = mutableMapOf<String, Map<Int, Map<Int, String>>>()
@@ -52,7 +53,7 @@ object WikipediaApi {
                 if (!response.isSuccessful) return null
                 response.body?.string()
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
     }
@@ -62,7 +63,30 @@ object WikipediaApi {
         return if (m.find()) m.group(1)?.toIntOrNull() else null
     }
 
-    private fun parseWikiEpisodeTables(doc: Document): Map<Int, Map<Int, String>> {
+    private fun extractHeadingText(element: Element): String? {
+        val tag = element.tagName().lowercase()
+        if (tag == "h2" || tag == "h3") return element.text()
+        if (tag == "div" && element.hasClass("mw-heading")) {
+            return element.selectFirst("h2, h3")?.text()
+        }
+        return null
+    }
+
+    private fun detectEpisodeColumnIndex(table: Element): Int? {
+        val headerRow = table.selectFirst("tr") ?: return null
+        val headers = headerRow.select("th, td").map { it.text().trim().lowercase() }
+        val targets = listOf("no. in season", "no.inseason", "airdate order", "no. overall", "no.overall", "no.")
+        for (target in targets) {
+            for ((idx, h) in headers.withIndex()) {
+                if (h.contains(target) && !h.contains("prod")) {
+                    return idx
+                }
+            }
+        }
+        return null
+    }
+
+    internal fun parseWikiEpisodeTables(doc: Document): Map<Int, Map<Int, String>> {
         val result = mutableMapOf<Int, MutableMap<Int, String>>()
         val tables = doc.select("table")
 
@@ -70,14 +94,12 @@ object WikipediaApi {
             val rows = table.select("tr.vevent, tr.module-episode-list-row")
             if (rows.isEmpty()) continue
 
-            // Find season heading for table
             var seasonNum: Int? = null
-            
-            // Traverse previous elements to find h2 or h3 heading
+
             var prevElement = table.previousElementSibling()
             while (prevElement != null) {
-                if (prevElement.tagName().equals("h2", ignoreCase = true) || prevElement.tagName().equals("h3", ignoreCase = true)) {
-                    val headingText = prevElement.text()
+                val headingText = extractHeadingText(prevElement)
+                if (headingText != null) {
                     val matcher = SEASON_HEADING_REGEX.matcher(headingText)
                     if (matcher.find()) {
                         seasonNum = matcher.group(1)?.toIntOrNull()
@@ -99,25 +121,32 @@ object WikipediaApi {
 
             if (seasonNum == null) continue
 
+            val epColIdx = detectEpisodeColumnIndex(table)
             val seasonEps = result.getOrPut(seasonNum) { mutableMapOf() }
+
             for (row in rows) {
                 val summary = row.selectFirst("td.summary") ?: continue
-                var title = summary.text().trim('"', '\'', '“', '”', ' ')
+                summary.select("sup.reference").remove()
+                val title = FOOTNOTE_SUFFIX_REGEX.replace(summary.text(), "")
+                    .trim('"', '\'', '“', '”', ' ')
 
                 val cells = row.select("td, th")
                 var epInSeason: Int? = null
 
-                var summaryIdx = -1
-                for (i in 0 until cells.size) {
-                    if (cells[i] == summary) {
-                        summaryIdx = i
-                        break
-                    }
+                if (epColIdx != null && epColIdx < cells.size) {
+                    epInSeason = extractEpisodeNumber(cells[epColIdx].text())
                 }
-
-                if (summaryIdx >= 1) {
-                    val prevCell = cells[summaryIdx - 1]
-                    epInSeason = extractEpisodeNumber(prevCell.text())
+                if (epInSeason == null) {
+                    var summaryIdx = -1
+                    for (i in 0 until cells.size) {
+                        if (cells[i] == summary) {
+                            summaryIdx = i
+                            break
+                        }
+                    }
+                    if (summaryIdx >= 1) {
+                        epInSeason = extractEpisodeNumber(cells[summaryIdx - 1].text())
+                    }
                 }
 
                 if (epInSeason != null && title.isNotBlank()) {
@@ -160,7 +189,7 @@ object WikipediaApi {
         return finalData
     }
 
-    fun getTitlesFromWikipedia(show: String, season: Int, episodeNumbers: List<Int>): Map<Int, String> {
+    fun getSeasonEpisodesFromWikipedia(show: String, season: Int): Map<Int, String> {
         val normalizedShow = show.lowercase().trim()
         val allSeasonData = fetchWikiSeasonData(show).toMutableMap()
 
@@ -179,12 +208,17 @@ object WikipediaApi {
             }
         }
 
-        val seasonData = allSeasonData[season] ?: return emptyMap()
+        return allSeasonData[season] ?: emptyMap()
+    }
+
+    fun getTitlesFromWikipedia(show: String, season: Int, episodeNumbers: List<Int>): Map<Int, String> {
+        val seasonData = getSeasonEpisodesFromWikipedia(show, season)
+        if (seasonData.isEmpty()) return emptyMap()
+        if (episodeNumbers.isEmpty()) return seasonData
+
         val result = mutableMapOf<Int, String>()
         for (num in episodeNumbers) {
-            if (seasonData.containsKey(num)) {
-                result[num] = seasonData[num]!!
-            }
+            seasonData[num]?.let { result[num] = it }
         }
         return result
     }

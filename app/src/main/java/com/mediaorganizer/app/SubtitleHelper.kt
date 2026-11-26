@@ -246,7 +246,8 @@ object SubtitleHelper {
         fun walk(dir: File) {
             val files = dir.listFiles() ?: return
             for (f in files) {
-                if (excludedPaths.any { f.absolutePath.startsWith(it) }) continue
+                if (MediaScanner.isPathExcluded(f, excludedPaths) ||
+                    (f.isDirectory && f.name.lowercase() in MediaScanner.IGNORED_DIR_NAMES)) continue
                 if (f.isDirectory) {
                     walk(f)
                 } else if (MediaScanner.isSubtitleFile(f) && f.absolutePath != videoFile.absolutePath) {

@@ -19,7 +19,7 @@ object TvMazeApi {
     private const val TVMAZE_MULTI_SEARCH_URL = "https://api.tvmaze.com/search/shows?q=%s"
     private const val TVMAZE_EPISODES_URL = "https://api.tvmaze.com/shows/%d/episodes"
 
-    private val TRAILING_YEAR_REGEX = Pattern.compile("\\s+(19|20)\\d{2}$")
+    private val TRAILING_YEAR_REGEX = Pattern.compile("\\s+((?:19|20)\\d{2})$")
 
     // Cache: show_name -> show_id
     private val showIdCache = mutableMapOf<String, Int?>()
@@ -39,7 +39,7 @@ object TvMazeApi {
             if (attempt < maxRetries - 1) {
                 try {
                     Thread.sleep(backoffMillis * (attempt + 1))
-                } catch (ignored: InterruptedException) {
+                } catch (_: InterruptedException) {
                 }
             }
         }
@@ -65,7 +65,13 @@ object TvMazeApi {
         }
     }
 
-    private fun multisearch(query: String): Int? {
+    private fun normalizeTitleForCompare(text: String): String {
+        return text.lowercase()
+            .replace("&", "and")
+            .replace(Regex("[^a-z0-9]"), "")
+    }
+
+    private fun multisearch(query: String, targetYear: String? = null): Int? {
         val encoded = URLEncoder.encode(query, "UTF-8")
         val url = String.format(TVMAZE_MULTI_SEARCH_URL, encoded)
         val request = Request.Builder()
@@ -79,12 +85,34 @@ object TvMazeApi {
             val bodyString = response.body?.string() ?: return null
             val listType = object : TypeToken<List<Map<String, Any>>>() {}.type
             val results: List<Map<String, Any>> = gson.fromJson(bodyString, listType)
-            if (results.isNotEmpty()) {
-                val firstShow = results[0]["show"] as? Map<*, *>
-                (firstShow?.get("id") as? Double)?.toInt()
-            } else {
-                null
+            if (results.isEmpty()) return null
+
+            val normalizedQuery = normalizeTitleForCompare(query)
+            var bestId: Int? = null
+            var bestScore = Int.MIN_VALUE
+
+            for ((index, entry) in results.withIndex()) {
+                val showObj = entry["show"] as? Map<*, *> ?: continue
+                val id = (showObj["id"] as? Double)?.toInt() ?: continue
+                val name = showObj["name"] as? String ?: ""
+                val premiered = showObj["premiered"] as? String ?: ""
+                val normName = normalizeTitleForCompare(name)
+
+                var score = (results.size - index)
+                if (normName == normalizedQuery) {
+                    score += 100
+                } else if (normName.startsWith(normalizedQuery) || normalizedQuery.startsWith(normName)) {
+                    score += 40
+                }
+                if (!targetYear.isNullOrEmpty() && premiered.startsWith(targetYear)) {
+                    score += 80
+                }
+                if (score > bestScore) {
+                    bestScore = score
+                    bestId = id
+                }
             }
+            bestId
         }
     }
 
@@ -92,6 +120,19 @@ object TvMazeApi {
         val normalized = show.lowercase().trim()
         if (showIdCache.containsKey(normalized)) {
             return showIdCache[normalized]
+        }
+
+        val yearMatcher = TRAILING_YEAR_REGEX.matcher(show)
+        val trailingYear = if (yearMatcher.find()) yearMatcher.group(1) else null
+        val stripped = TRAILING_YEAR_REGEX.matcher(show).replaceAll("").trim()
+
+        // If show includes a year, try multisearch with year disambiguation first so remakes pick the right series.
+        if (trailingYear != null && stripped.isNotEmpty()) {
+            val yearMatchedId = retryRequest { multisearch(stripped, trailingYear) }
+            if (yearMatchedId != null) {
+                showIdCache[normalized] = yearMatchedId
+                return yearMatchedId
+            }
         }
 
         // 1. Try exact name via singlesearch
@@ -102,7 +143,6 @@ object TvMazeApi {
         }
 
         // 2. Strip trailing year and retry (e.g. "Sugar 2024" -> "Sugar")
-        val stripped = TRAILING_YEAR_REGEX.matcher(show).replaceAll("").trim()
         if (stripped.isNotEmpty() && stripped != show) {
             id = retryRequest { singlesearch(stripped) }
             if (id != null) {
@@ -111,16 +151,15 @@ object TvMazeApi {
             }
         }
 
-        // 3. Fall back to multi-result search
-        id = retryRequest { multisearch(show) }
+        // 3. Fall back to multi-result search with exact-title scoring
+        id = retryRequest { multisearch(show, trailingYear) }
         if (id != null) {
             showIdCache[normalized] = id
             return id
         }
 
-        // 4. Try multi-search with stripped name
         if (stripped.isNotEmpty() && stripped != show) {
-            id = retryRequest { multisearch(stripped) }
+            id = retryRequest { multisearch(stripped, trailingYear) }
             if (id != null) {
                 showIdCache[normalized] = id
                 return id
@@ -172,45 +211,47 @@ object TvMazeApi {
         return epLookup
     }
 
-    fun getTitlesFromTvMaze(show: String, season: Int, episodeNumbers: List<Int>): Map<Int, String> {
+    fun getSeasonEpisodesFromTvMaze(show: String, season: Int): Map<Int, String> {
         val epLookup = fetchTvMazeEpisodes(show)
         if (epLookup.isEmpty()) return emptyMap()
 
-        // 1. Exact season match
-        var result = mutableMapOf<Int, String>()
-        for (epNum in episodeNumbers) {
-            val key = Pair(season, epNum)
-            if (epLookup.containsKey(key)) {
-                result[epNum] = epLookup[key]!!
+        val exactSeasonMap = mutableMapOf<Int, String>()
+        for ((key, title) in epLookup) {
+            if (key.first == season) {
+                exactSeasonMap[key.second] = title
             }
         }
-
-        if (result.size == episodeNumbers.size) {
-            return result
+        if (exactSeasonMap.isNotEmpty()) {
+            return exactSeasonMap
         }
 
-        // 2. Try adjacent seasons (±1, ±2) if missing episodes
+        // Only try adjacent seasons if the requested season has zero episodes in TVMaze.
         val offsets = listOf(1, -1, 2, -2)
         for (offset in offsets) {
             val altSeason = season + offset
             if (altSeason < 1) continue
-
-            val altResult = mutableMapOf<Int, String>()
-            for (epNum in episodeNumbers) {
-                val key = Pair(altSeason, epNum)
-                if (epLookup.containsKey(key)) {
-                    altResult[epNum] = epLookup[key]!!
+            val altMap = mutableMapOf<Int, String>()
+            for ((key, title) in epLookup) {
+                if (key.first == altSeason) {
+                    altMap[key.second] = title
                 }
             }
-
-            if (altResult.size > result.size) {
-                result = altResult
-                if (result.size == episodeNumbers.size) {
-                    return result
-                }
+            if (altMap.isNotEmpty()) {
+                return altMap
             }
         }
+        return emptyMap()
+    }
 
+    fun getTitlesFromTvMaze(show: String, season: Int, episodeNumbers: List<Int>): Map<Int, String> {
+        val seasonMap = getSeasonEpisodesFromTvMaze(show, season)
+        if (seasonMap.isEmpty()) return emptyMap()
+        if (episodeNumbers.isEmpty()) return seasonMap
+
+        val result = mutableMapOf<Int, String>()
+        for (epNum in episodeNumbers) {
+            seasonMap[epNum]?.let { result[epNum] = it }
+        }
         return result
     }
 }
